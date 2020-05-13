@@ -603,7 +603,10 @@ using if_variable_wrapper_t = std::enable_if_t<is_variable_wrapper_v<T>>;
 // ========================== VARIABLE WRAPPER BASE ========================= //
 // The common base of variable wrappers
 template <class...>
-struct variable_wrapper_base: wrapper_base {
+class variable_wrapper_base: wrapper_base
+{
+    // Types
+    public:
     using is_variable_wrapper = std::true_type;
 };
 
@@ -611,6 +614,10 @@ struct variable_wrapper_base: wrapper_base {
 template <template <class...> class CRTP, class T>
 class variable_wrapper_base<CRTP<T>>: public variable_wrapper_base<>
 {
+    // Friendship
+    template <class...>
+    friend class variable_wrapper_base;
+    
     // Types
     public:
     using wrapper_type = CRTP<T>;
@@ -620,7 +627,6 @@ class variable_wrapper_base<CRTP<T>>: public variable_wrapper_base<>
 
     // Helpers
     private:
-    using self = variable_wrapper_base<CRTP<T>>;
     using crtp = CRTP<T>;
     template <class>
     struct is_same_crtp: std::false_type {};
@@ -679,18 +685,18 @@ class variable_wrapper_base<CRTP<T>>: public variable_wrapper_base<>
     constexpr variable_wrapper_base() noexcept(
         std::is_nothrow_default_constructible_v<type>
     ) = default;
-    constexpr variable_wrapper_base(const self& other) noexcept(
+    constexpr variable_wrapper_base(const variable_wrapper_base&) noexcept(
         std::is_nothrow_copy_constructible_v<type>
     ) = default;
-    constexpr variable_wrapper_base(self&& other) noexcept(
+    constexpr variable_wrapper_base(variable_wrapper_base&&) noexcept(
         std::is_nothrow_move_constructible_v<type>
     ) = default;
     template <class U, class V = if_wrapper<U&&>, class = std::void_t<
         std::enable_if_t<is_same_crtp_v<remove_cvref_t<U&&>>, if_convertible<V>>
     >, bool = std::true_type::value>
-    explicit constexpr variable_wrapper_base(U&& other) noexcept(
+    constexpr variable_wrapper_base(U&& other) noexcept(
         is_nothrow_constructible<U&&>
-    ): _variable(std::forward<U>(other)) {
+    ): _variable(std::forward<U>(other)._variable) {
     }
     template <class U, class = if_not_wrapper<U&&>, class = if_convertible<U&&>>
     constexpr variable_wrapper_base(U&& other) noexcept(
@@ -702,7 +708,7 @@ class variable_wrapper_base<CRTP<T>>: public variable_wrapper_base<>
     >>
     explicit constexpr variable_wrapper_base(U&& other, Us&&...) noexcept(
         is_nothrow_constructible<U&&, Us&&...>
-    ): _variable(std::forward<U>(other)()) {
+    ): _variable(std::forward<U>(other)._variable) {
     }
     template <class U, class... Us, class = std::void_t<
         std::void_t<if_not_wrapper<U&&>, if_constructible<U&&, Us&&...>>
@@ -714,23 +720,23 @@ class variable_wrapper_base<CRTP<T>>: public variable_wrapper_base<>
 
     // Assignment
     public:
-    constexpr crtp& operator=(const self& other) noexcept(
+    constexpr crtp& operator=(const variable_wrapper_base& other) noexcept(
         std::is_nothrow_copy_assignable_v<type>
     ) {
-        _variable = other();
+        _variable = other._variable;
         return static_cast<crtp&>(*this);
     };
-    constexpr crtp& operator=(self&& other) noexcept(
+    constexpr crtp& operator=(variable_wrapper_base&& other) noexcept(
         std::is_nothrow_move_assignable_v<type>
     ) {
-        _variable = std::move(other());
+        _variable = std::move(other._variable);
         return static_cast<crtp&>(*this);
     };
     template <class U, class V = if_wrapper<U&&>, int = if_assignable<V>::value>
     constexpr crtp& operator=(U&& other) noexcept(
         is_nothrow_assignable<V>
     ) {
-        _variable = std::forward<U>(other)();
+        _variable = std::forward<U>(other)._variable;
         return static_cast<crtp&>(*this);
     }
     template <class U, class = if_not_wrapper<U&&>, class = if_assignable<U&&>> 
@@ -749,27 +755,35 @@ class variable_wrapper_base<CRTP<T>>: public variable_wrapper_base<>
     // Implicit access
     public:
     constexpr operator type&() & {
+        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
     constexpr operator const type&() const & {
+        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
     constexpr operator volatile type&() volatile & {
+        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
     constexpr operator const volatile type&() const volatile & {
+        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
-    constexpr operator type&&() && {
+    constexpr operator type&() && {
+        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
-    constexpr operator const type&&() const && {
+    constexpr operator const type&() const && {
+        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
-    constexpr operator volatile type&&() volatile && {
+    constexpr operator volatile type&() volatile && {
+        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
-    constexpr operator const volatile type&&() const volatile && {
+    constexpr operator const volatile type&() const volatile && {
+        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
 
@@ -787,16 +801,16 @@ class variable_wrapper_base<CRTP<T>>: public variable_wrapper_base<>
     constexpr const volatile type& operator()() const volatile & {
         return _variable;
     }
-    constexpr type&& operator()() && {
+    constexpr type& operator()() && {
         return _variable;
     }
-    constexpr const type&& operator()() const && {
+    constexpr const type& operator()() const && {
         return _variable;
     }
-    constexpr volatile type&& operator()() volatile && {
+    constexpr volatile type& operator()() volatile && {
         return _variable;
     }
-    constexpr const volatile type&& operator()() const volatile && {
+    constexpr const volatile type& operator()() const volatile && {
         return _variable;
     }
 
@@ -829,10 +843,11 @@ constexpr variable_wrapper<T> wrap(const T& x) noexcept {
 // ============================= OBJECT WRAPPER ============================= //
 // A wrapper to hold an object
 template <class T>
-struct object_wrapper: variable_wrapper_base<object_wrapper<T>> {
-    using variable_wrapper_base<object_wrapper<T>>::variable_wrapper_base;
-    using variable_wrapper_base<object_wrapper<T>>::operator=;
-    using variable_wrapper_base<object_wrapper<T>>::operator();
+struct object_wrapper
+: variable_wrapper<std::enable_if_t<std::is_object_v<T>, T>> {
+    using variable_wrapper<T>::variable_wrapper;
+    using variable_wrapper<T>::operator=;
+    using variable_wrapper<T>::operator();
 };
     
 // Makes a wrapper that holds an object
@@ -847,10 +862,11 @@ constexpr object_wrapper<T> wrap_object(const T& x) noexcept {
 // ============================ REFERENCE WRAPPER =========================== //
 // A wrapper to hold a reference
 template <class T>
-struct reference_wrapper: variable_wrapper_base<reference_wrapper<T>> {
-    using variable_wrapper_base<reference_wrapper<T>>::variable_wrapper_base;
-    using variable_wrapper_base<reference_wrapper<T>>::operator=;
-    using variable_wrapper_base<reference_wrapper<T>>::operator();
+struct reference_wrapper
+: variable_wrapper<std::enable_if_t<std::is_reference_v<T>, T>> {
+    using variable_wrapper<T>::variable_wrapper;
+    using variable_wrapper<T>::operator=;
+    using variable_wrapper<T>::operator();
 };
     
 // Makes a wrapper that holds a reference
