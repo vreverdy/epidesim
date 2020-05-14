@@ -30,13 +30,13 @@ template <auto Value>
 struct constant {
     using type = constant;
     using value_type = decltype(Value);
-    static constexpr auto value = Value;
     constexpr operator value_type() const noexcept {
         return value;
     }
     constexpr value_type operator()() const noexcept {
         return value;
     }
+    static constexpr auto value = Value;
 };
 
 // Variable template
@@ -53,18 +53,18 @@ struct index_constant: constant<Index> {
     using integral_constant = std::integral_constant<std::size_t, Index>;
     constexpr index_constant(integral_constant) noexcept {
     }
-    template <class T, T V, class = std::enable_if_t<V == Value>>
-    explicit constexpr index_constant(std::integral_constant<T, V>) noexcept {
+    template <class T, T I, class = std::enable_if_t<I == Index>>
+    explicit constexpr index_constant(std::integral_constant<T, I>) noexcept {
     }
     constexpr operator integral_constant() const noexcept {
         return integral_constant{};
     }
-    template <class T, T V, class = std::enable_if_t<V == Value>>
-    explicit constexpr operator std::integral_constant<T, V>() const noexcept {
-        return std::integral_constant<T, V>{};
+    template <class T, T I, class = std::enable_if_t<I == Index>>
+    explicit constexpr operator std::integral_constant<T, I>() const noexcept {
+        return std::integral_constant<T, I>{};
     }
-    template <class T, T V, class = std::enable_if_t<V == Value>>
-    constexpr index_constant& operator=(std::integral_constant<T, V>) noexcept {
+    template <class T, T I, class = std::enable_if_t<I == Index>>
+    constexpr index_constant& operator=(std::integral_constant<T, I>) noexcept {
         return *this;
     }
 };
@@ -84,18 +84,18 @@ struct size_constant: constant<Size> {
     using index_sequence = std::make_index_sequence<Size>;
     constexpr size_constant(integral_constant) noexcept {
     }
-    template <class T, T V, class = std::enable_if_t<V == Value>>
-    explicit constexpr size_constant(std::integral_constant<T, V>) noexcept {
+    template <class T, T S, class = std::enable_if_t<S == Size>>
+    explicit constexpr size_constant(std::integral_constant<T, S>) noexcept {
     }
     constexpr operator integral_constant() const noexcept {
         return integral_constant{};
     }
-    template <class T, T V, class = std::enable_if_t<V == Value>>
-    explicit constexpr operator std::integral_constant<T, V>() const noexcept {
-        return std::integral_constant<T, V>{};
+    template <class T, T S, class = std::enable_if_t<S == Size>>
+    explicit constexpr operator std::integral_constant<T, S>() const noexcept {
+        return std::integral_constant<T, S>{};
     }
-    template <class T, T V, class = std::enable_if_t<V == Value>>
-    constexpr size_constant& operator=(std::integral_constant<T, V>) noexcept {
+    template <class T, T S, class = std::enable_if_t<S == Size>>
+    constexpr size_constant& operator=(std::integral_constant<T, S>) noexcept {
         return *this;
     }
 };
@@ -114,24 +114,34 @@ template <
     std::size_t Base,
     long long int Exponent
 >
-struct floating_point_constant:
-{
+struct floating_point_constant {
     using type = floating_point_constant;
     using value_type = Type;
     static constexpr long long int mantissa = Mantissa;
     static constexpr std::size_t base = Base;
     static constexpr long long int exponent = Exponent;
-    static constexpr std::size_t value = static_cast<Type>(Mantissa) * std::pow(
-        static_cast<Type>(Base),
-        static_cast<Type>(Exponent)
-    );
     constexpr operator value_type() const noexcept {
         return value;
     }
     constexpr value_type operator()() const noexcept {
         return value;
     }
-    
+    static constexpr value_type convert() {
+        using uint_t = unsigned long long int;
+        constexpr decltype(exponent) zero = 0;
+        constexpr uint_t one = 1;
+        constexpr value_type m = mantissa;
+        value_type r = one;
+        uint_t e = exponent > zero ? exponent : -exponent;
+        for (uint_t b = base; e; e >>= one, b *= b) {
+            if (e & one) {
+                r *= b;
+            }
+        }
+        
+        return exponent < zero ? m / r : m * r;
+    }
+    static constexpr value_type value = convert();
 };
 
 // Generic variable template
