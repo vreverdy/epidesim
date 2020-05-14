@@ -1,13 +1,13 @@
-// ================================= WRAPPER ================================ //
+// ================================ WRAPPERS ================================ //
 // Project:         epidesim
-// Name:            wrapper.hpp
-// Description:     A family of wrappers to handle the non-genericity over kinds
+// Name:            wrappers.hpp
+// Description:     Wrapper types to handle the non-genericity over kinds
 // Creator:         Vincent Reverdy
 // Contributor(s):  Vincent Reverdy [2020-]
 // License:         BSD 3-Clause License
 // ========================================================================== //
-#ifndef _WRAPPER_HPP_INCLUDED
-#define _WRAPPER_HPP_INCLUDED
+#ifndef _WRAPPERS_HPP_INCLUDED
+#define _WRAPPERS_HPP_INCLUDED
 // ========================================================================== //
 
 
@@ -880,5 +880,5 @@ constexpr reference_wrapper<T&&> wrap_reference(T&& x) noexcept {
 
 // ========================================================================== //
 } // namespace epidesim
-#endif // _WRAPPER_HPP_INCLUDED
+#endif // _WRAPPERS_HPP_INCLUDED
 // ========================================================================== //
