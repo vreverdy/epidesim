@@ -51,6 +51,7 @@ inline constexpr constant<Value> constant_v;
 template <std::size_t Index>
 struct index_constant: constant<Index> {
     using integral_constant = std::integral_constant<std::size_t, Index>;
+    using index_constant::constant::constant;
     constexpr index_constant(integral_constant) noexcept {
     }
     template <class T, T I, class = std::enable_if_t<I == Index>>
@@ -82,6 +83,7 @@ template <std::size_t Size>
 struct size_constant: constant<Size> {
     using integral_constant = std::integral_constant<std::size_t, Size>;
     using index_sequence = std::make_index_sequence<Size>;
+    using size_constant::constant::constant;
     constexpr size_constant(integral_constant) noexcept {
     }
     template <class T, T S, class = std::enable_if_t<S == Size>>

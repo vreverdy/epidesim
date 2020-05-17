@@ -1,7 +1,7 @@
 // ================================== PACK ================================== //
 // Project:         epidesim
 // Name:            pack.hpp
-// Description:     Management of parameter packs
+// Description:     Uniform management of parameter packs
 // Creator:         Vincent Reverdy
 // Contributor(s):  Vincent Reverdy [2020-]
 // License:         BSD 3-Clause License
@@ -17,6 +17,8 @@
 #include <utility>
 #include <type_traits>
 // Project sources
+#include "wrappers.hpp"
+#include "constants.hpp"
 // Third-party libraries
 // Miscellaneous
 namespace epidesim {
@@ -24,245 +26,305 @@ namespace epidesim {
 
 
 
-// =========================== PACK ELEMENT INDEX =========================== //
-// The type of a pack element index
-template <std::size_t Index>
-struct pack_element_index: std::integral_constant<std::size_t, Index> {
-    using integral_constant = std::integral_constant<std::size_t, Index>;
-    using std::integral_constant<std::size_t, Index>::integral_constant;
-    constexpr pack_element_index() noexcept = default;
-    constexpr pack_element_index(integral_constant) noexcept {
-    }
-};
+// ================================= IS PACK ================================ //
+// Checks if the type is a pack: not a pack
+template <class T, class = void>
+struct is_pack: std::false_type {};
+
+// Checks if the type is a pack: it is a pack
+template <class Pack>
+struct is_pack<Pack, std::enable_if_t<Pack::is_pack::value>>: std::true_type {};
 
 // Variable template
-template <std::size_t Index>
-inline constexpr pack_element_index<Index> pack_index = {};
+template <class T>
+inline constexpr bool is_pack_v = is_pack<T>::value;
+
+// Alias template
+template <class T>
+using if_pack_t = std::enable_if_t<is_pack_v<T>>;
+// ========================================================================== //
+
+
+
+// ======================= PACKS FORWARD DECLARATIONS ======================= //
+// Bool pack
+template <bool... Bools>
+struct bool_pack;
+
+// Nttp pack
+template <auto... Values>
+struct nttp_pack;
+
+// Type pack
+template <class... Types>
+struct type_pack;
+
+// Nttp template pack
+template <template <auto...> class... Templates>
+struct nttp_template_pack;
+
+// Type template pack
+template <template <class...> class... Templates>
+struct type_template_pack;
+
+// Mixed template pack
+template <template <class, auto...> class... Templates>
+struct mixed_template_pack;
 // ========================================================================== //
 
 
 
 // ================================ PACK BASE =============================== //
-// A generic base class for pack elements using CRTP
-template <std::size_t Index, class Base, class Derived>
-struct pack_element_base: private Base {
-    using element = Derived;
-    using element_type = Base;
-    using element_index = pack_element_index<Index>;
-    static constexpr element_index pack_index = {}; 
-    static constexpr std::size_t index = pack_index;
-    constexpr element& operator[](element_index) noexcept {
-        return static_cast<element&>(*this);
-    }
-    constexpr const element& operator[](element_index) const noexcept {
-        return static_cast<element&>(*this);
-    }
-    template <std::size_t I = index, class = std::enable_if_t<I == index>>
-    constexpr element& at(element_index = {}) noexcept {
-        return static_cast<element&>(*this);
-    }
-    template <std::size_t I = index, class = std::enable_if_t<I == index>>
-    constexpr const element& at(element_index = {}) const noexcept {
-        return static_cast<element&>(*this);
-    }
-    template <std::size_t I = index, class = std::enable_if_t<I == index>>
-    constexpr element_type& get(element_index = {}) noexcept {
-        return static_cast<element_type&>(*this);
-    }
-    template <std::size_t I = index, class = std::enable_if_t<I == index>>
-    constexpr const element_type& get(element_index = {}) const noexcept {
-        return static_cast<element_type&>(*this);
-    }
-    template <std::size_t I = index, class = std::enable_if_t<I == index>>
-    static constexpr element extract(element_index = {}) noexcept {
-        return element{};
-    }
-};
-
 // A generic base class for packs
-template <std::size_t Size>
-struct pack_base {
+template <class... Elements>
+struct pack_base: Elements... {
     using is_pack = std::true_type;
-    using index_sequence = std::make_index_sequence<Size>;
+    using is_pack_element = std::false_type;
+    using index_sequence = std::index_sequence_for<Elements...>;
+    using Elements::operator[]...;
+    using Elements::get...;
+    template <class Trait, class... Args>
+    using pack_result = type_pack<
+        decltype(Elements::template apply<Trait, Args...>())...
+    >;
+    template <class Trait, class... Args>
+    using pack_result_t = type_pack<
+        typename decltype(Elements::template apply<Trait, Args...>())::type...
+    >;
+    template <class Trait, class... Args>
+    using pack_result_v = std::conditional_t<
+        std::is_same_v<std::common_type_t<
+            decltype(Elements::template apply<Trait, Args...>().value)...
+        >, bool>,
+        bool_pack<std::conditional_t<
+            std::is_same_v<std::common_type_t<
+                decltype(Elements::template apply<Trait, Args...>().value)...
+            >, bool>,
+            decltype(Elements::template apply<Trait, Args...>()),
+            std::false_type
+        >::value...>,
+        nttp_pack<Elements::template apply<Trait, Args...>().value...>
+    >;
     static constexpr std::size_t size() noexcept {
-        return Size;
+        return sizeof...(Elements);
+    }
+    template <class Trait, class... Args>
+    static constexpr pack_result<Trait, Args...> apply() noexcept {
+        return pack_result<Trait, Args...>{};
+    }
+    template <class Trait, class... Args>
+    static constexpr pack_result_t<Trait, Args...> apply_t() noexcept {
+        return pack_result_t<Trait, Args...>{};
+    }
+    template <class Trait, class... Args>
+    static constexpr pack_result_v<Trait, Args...> apply_v() noexcept {
+        return pack_result_v<Trait, Args...>{};
     }
 };
 // ========================================================================== //
 
 
-/*
-// =============================== BOOL TRAIT =============================== //
-// A trait wrapper for a boolean pack
-template <template <bool, class...> Trait>
-struct bool_pack_trait {
-    template <bool Bool, class... Args>
-    using temploid = Trait<Bool, Args...>;
-    template <bool Bool, class... Args>
-    using type = typename Trait<Bool, Args...>::type;
-    template <bool Bool, class... Args>
-    static constexpr auto value = Trait<Bool, Args...>::value;
-};
 
-// Type alias template
-template <template <bool, class...> Trait, bool Bool, class... Args>
-using bool_pack_trait_t
-= typename bool_pack_trait<Trait>::template temploid<Bool, Args...>::type;
+// ============================= IS PACK ELEMENT ============================ //
+// Checks if the type is a pack element: not a pack element
+template <class T, class = void>
+struct is_pack_element: std::false_type {};
 
-// Value variable template
-template <template <bool, class...> Trait, bool Bool, class... Args>
-inline constexpr auto bool_pack_trait_v
-= bool_pack_trait<Trait>::template temploid<Bool, Args...>::value;
+// Checks if the type is a pack element: it is a pack element
+template <class Element>
+struct is_pack_element<
+    Element,
+    std::enable_if_t<Element::is_pack_element::value>
+>: std::true_type {};
 
-// Enable if alias template
-template <template <bool, class...> Trait, bool Bool, class... Args>
-using if_bool_pack_trait_t
-= std::enable_if_t<bool_pack_trait_v<Trait<Bool, Args...>>>;
+// Variable template
+template <class T>
+inline constexpr bool is_pack_element_v = is_pack_element<T>::value;
+
+// Alias template
+template <class T>
+using if_pack_element_t = std::enable_if_t<is_pack_element_v<T>>;
 // ========================================================================== //
-*/
+
+
+
+// ============================ PACK ELEMENT BASE =========================== //
+// A generic base class for pack elements
+template <std::size_t Index, class Wrapper, class CRTP>
+struct pack_element_base {
+    using is_pack_element = std::true_type;
+    using index_type = index_constant<Index>;
+    using wrapper_type = Wrapper;
+    using element_type = CRTP;
+    static constexpr std::size_t index = index_type::value;
+    using disambiguator = index_type;
+    template <class... Args>
+    static constexpr std::nullptr_t disambiguate = nullptr;
+    using id_t = disambiguator;
+    template <class Trait, class... Args>
+    using apply_result = apply_trait<Trait, wrapper_type, Args...>;
+    template <class Trait, class... Args>
+    using apply_result_t = typename apply_result<Trait, Args...>::type;
+    template <class Trait, class... Args>
+    static constexpr auto apply_result_v = apply_result<Trait, Args...>::value;
+    template <class Trait, class... Args>
+    using apply_result_v_t = decltype(apply_result<Trait, Args...>::value);
+    template <bool Condition>
+    using if_t = std::enable_if_t<Condition, std::nullptr_t>;
+    template <std::size_t I>
+    using if_same_index_t = if_t<I == index>;
+    template <class W>
+    using if_same_wrapper_t = if_t<std::is_same_v<W, wrapper_type>>;
+    template <class Trait, class... Args>
+    using if_applicable_t = if_t<std::is_void_v<
+        if_apply_trait_t<Trait, wrapper_type, Args...>
+    >>;
+    constexpr wrapper_type& operator[](index_type) noexcept {
+        return static_cast<wrapper_type&>(*this);
+    }
+    constexpr const wrapper_type& operator[](index_type) const noexcept {
+        return static_cast<const wrapper_type&>(*this);
+    }
+    template <class W, disambiguator* = if_same_wrapper_t<W>{}>
+    constexpr wrapper_type& operator[](const W&) noexcept {
+        return static_cast<wrapper_type&>(*this);
+    }
+    template <class W, disambiguator* = if_same_wrapper_t<W>{}>
+    constexpr const wrapper_type& operator[](const W&) const noexcept {
+        return static_cast<const wrapper_type&>(*this);
+    }
+    template <class Trait, disambiguator** = if_applicable_t<Trait>{}>
+    constexpr wrapper_type& operator[](const Trait&) noexcept {
+        return static_cast<wrapper_type&>(*this);
+    }
+    template <class Trait, disambiguator** = if_applicable_t<Trait>{}>
+    constexpr const wrapper_type& operator[](const Trait&) const noexcept {
+        return static_cast<const wrapper_type&>(*this);
+    }
+    template <class Trait, class... Args, disambiguator* = disambiguate<Trait>>
+    static constexpr apply_result<Trait, Args...> apply() noexcept {
+        return apply_result<Trait, Args...>{};
+    }
+    template <class Trait, class... Args, disambiguator* = disambiguate<Trait>>
+    static constexpr apply_result_t<Trait, Args...> apply_t() noexcept {
+        return apply_result_t<Trait, Args...>{};
+    }
+    template <class Trait, class... Args, disambiguator* = disambiguate<Trait>>
+    static constexpr apply_result_v_t<Trait, Args...> apply_v() noexcept {
+        return apply_result_v<Trait, Args...>;
+    }
+    template <std::size_t I = index, disambiguator* = if_same_index_t<I>{}>
+    constexpr element_type& get(index_type = {}) noexcept {
+        return static_cast<element_type&>(*this);
+    }
+    template <std::size_t I = index, disambiguator* = if_same_index_t<I>{}>
+    constexpr const element_type& get(index_type = {}) const noexcept {
+        return static_cast<const element_type&>(*this);
+    }
+    template <class W, disambiguator** = if_same_wrapper_t<W>{}>
+    constexpr element_type& get() noexcept {
+        return static_cast<element_type&>(*this);
+    }
+    template <class W, disambiguator** = if_same_wrapper_t<W>{}>
+    constexpr const element_type& get() const noexcept {
+        return static_cast<const element_type&>(*this);
+    }
+    template <class Trait, class... X, id_t*** = if_applicable_t<Trait, X...>{}>
+    constexpr element_type& get() noexcept {
+        return static_cast<element_type&>(*this);
+    }
+    template <class Trait, class... X, id_t*** = if_applicable_t<Trait, X...>{}>
+    constexpr const element_type& get() const noexcept {
+        return static_cast<const element_type&>(*this);
+    }
+};
+// ========================================================================== //
+
 
 
 // ================================ BOOL PACK =============================== //
-// A wrapper for an element of a boolean pack: declaration
-template <bool Bool, std::size_t... Index>
-struct bool_pack_element;
-
-// A wrapper for an element of a boolean pack: non-indexed version
-template <bool Bool>
-struct bool_pack_element<Bool>: std::bool_constant<Bool> {};
-
-// A wrapper for an element of a boolean pack: indexed version
-template <bool Bool, std::size_t Index>
-struct bool_pack_element<Bool, Index>
-: pack_element_base<
-    Index,
-    bool_pack_element<Bool>,
-    bool_pack_element<Bool, Index>
-> {
+// An indexed element of a bool pack
+template <std::size_t Index, bool Bool>
+struct bool_pack_element
+: pack_element_base<Index, bool_wrapper<Bool>, bool_pack_element<Index, Bool>> {
     using base = typename bool_pack_element::pack_element_base;
-    using element = typename base::element;
-    using element_type = typename base::element_type;
-    using element_index = typename base::element_index;
-    using base::operator[];
-    using base::at;
-    using base::get;
-    using base::extract;
-    template <bool B, class = std::enable_if_t<B == Bool>>
-    static constexpr element match(element_index = {}) noexcept {
-        return element{};
-    }
-    template <
-        template <bool, class...> class Trait,
-        class... Args,
-        class = std::enable_if_t<Trait<Bool, Args...>::value>
-    >
-    static constexpr element match(element_index = {}) noexcept {
-        return element{};
-    }
-    template <template <bool, class...> class Trait, class... Args>
-    static constexpr Trait<Bool, Args...> apply(element_index = {}) noexcept {
-        return Trait<Bool, Args...>{};
-    }
 };
 
-// The base class of a boolean pack: declaration
+// The base class of a bool pack: declaration
 template <class Indices, bool... Bools>
 struct bool_pack_base;
 
-// The base class of a boolean pack: indexing specialization
+// The base class of a bool pack: indexing specialization
 template <std::size_t... Indices, bool... Bools>
 struct bool_pack_base<std::index_sequence<Indices...>, Bools...>
-: pack_base<sizeof...(Indices)>, bool_pack_element<Bools, Indices>... {
-    using bool_pack_element<Bools, Indices>::operator[]...;
-    using bool_pack_element<Bools, Indices>::at...;
-    using bool_pack_element<Bools, Indices>::get...;
-    using bool_pack_element<Bools, Indices>::extract...;
-    using bool_pack_element<Bools, Indices>::match...;
+: pack_base<bool_pack_element<Indices, Bools>...> {
+    using base = typename bool_pack_base::pack_base;
 };
 
-// A pack of boolean values
+// A pack of bools
 template <bool... Bools>
 struct bool_pack: bool_pack_base<
     std::make_index_sequence<sizeof...(Bools)>,
     Bools...
 > {
     using base = typename bool_pack::bool_pack_base;
-    using base::operator[];
-    using base::at;
-    using base::get;
-    using base::extract;
-    using base::match;
 };
 
-// Makes a pack of boolean values
+// Makes a pack of bools
 template <bool... Bools>
-constexpr bool_pack<Bools...> make_pack() noexcept {
+constexpr bool_pack<Bools...> pack() noexcept {
     return bool_pack<Bools...>{};
 }
 // ========================================================================== //
 
 
 
-// ================================ TYPE PACK =============================== //
-// A trait wrapper for a type pack
-template <template <class, class...> Trait>
-struct type_pack_trait {
-    template <class Type, class... Args>
-    using temploid = Trait<Type, Args...>;
-};
-
-// A trait wrapper for a type pack: alias template
-template <template <bool, class...> Trait, bool Bool, class... Args>
-using type_pack_trait_t
-= typename type_pack_trait<Trait>::template temploid<Bool, Args...>::type;
-
-// A trait wrapper for a type pack: variable template
-template <template <bool, class...> Trait, bool Bool, class... Args>
-inline constexpr auto type_pack_trait_v
-= type_pack_trait<Trait>::template temploid<Bool, Args...>::value;
-
-// A wrapper for an element of a type pack: declaration
-template <class Type, std::size_t... Index>
-struct type_pack_element;
-
-// A wrapper for an element of a type pack: non-indexed version
-template <class Type>
-struct type_pack_element<Type> {
-    using type = Type;
-};
-
-// A wrapper for an element of a type pack: indexed version
-template <class Type, std::size_t Index>
-struct type_pack_element<Type, Index>
-: pack_element_base<
+// ================================ NTTP PACK =============================== //
+// An indexed element of a nttp pack
+template <std::size_t Index, auto Value>
+struct nttp_pack_element: pack_element_base<
     Index,
-    type_pack_element<Type>,
-    type_pack_element<Type, Index>
+    nttp_wrapper<Value>,
+    nttp_pack_element<Index, Value>
 > {
+    using base = typename nttp_pack_element::pack_element_base;
+};
+
+// The base class of a nttp pack: declaration
+template <class Indices, auto... Values>
+struct nttp_pack_base;
+
+// The base class of a nttp pack: indexing specialization
+template <std::size_t... Indices, auto... Values>
+struct nttp_pack_base<std::index_sequence<Indices...>, Values...>
+: pack_base<nttp_pack_element<Indices, Values>...> {
+    using base = typename nttp_pack_base::pack_base;
+};
+
+// A pack of nttps
+template <auto... Values>
+struct nttp_pack: nttp_pack_base<
+    std::make_index_sequence<sizeof...(Values)>,
+    Values...
+> {
+    using base = typename nttp_pack::nttp_pack_base;
+};
+
+// Makes a pack of nttps
+template <auto... Values>
+constexpr nttp_pack<Values...> pack() noexcept {
+    return nttp_pack<Values...>{};
+}
+// ========================================================================== //
+
+
+
+// ================================ TYPE PACK =============================== //
+// An indexed element of a type pack
+template <std::size_t Index, class Type>
+struct type_pack_element
+: pack_element_base<Index, type_wrapper<Type>, type_pack_element<Index, Type>> {
     using base = typename type_pack_element::pack_element_base;
-    using element = typename base::element;
-    using element_type = typename base::element_type;
-    using element_index = typename base::element_index;
-    using base::operator[];
-    using base::at;
-    using base::get;
-    using base::extract;
-    template <class T, class = std::enable_if_t<std::is_same_v<T, Type>>>
-    static constexpr element match(element_index = {}) noexcept {
-        return element{};
-    }
-    template <
-        template <class, class...> class Trait,
-        class... Args,
-        class = std::enable_if_t<Trait<Type, Args...>::value>
-    >
-    static constexpr element match(element_index = {}) noexcept {
-        return element{};
-    }
-    template <template <class, class...> class Trait, class... Args>
-    static constexpr Trait<Type, Args...> apply(element_index = {}) noexcept {
-        return Trait<Type, Args...>{};
-    }
 };
 
 // The base class of a type pack: declaration
@@ -272,37 +334,145 @@ struct type_pack_base;
 // The base class of a type pack: indexing specialization
 template <std::size_t... Indices, class... Types>
 struct type_pack_base<std::index_sequence<Indices...>, Types...>
-: pack_base<sizeof...(Indices)>, type_pack_element<Types, Indices>... {
-    using type_pack_element<Types, Indices>::operator[]...;
-    using type_pack_element<Types, Indices>::at...;
-    using type_pack_element<Types, Indices>::get...;
-    using type_pack_element<Types, Indices>::extract...;
-    using type_pack_element<Types, Indices>::match...;
+: pack_base<type_pack_element<Indices, Types>...> {
+    using base = typename type_pack_base::pack_base;
 };
 
 // A pack of types
 template <class... Types>
-struct type_pack: type_pack_base<
-    std::make_index_sequence<sizeof...(Types)>,
-    Types...
-> {
+struct type_pack: type_pack_base<std::index_sequence_for<Types...>, Types...> {
     using base = typename type_pack::type_pack_base;
-    using base::operator[];
-    using base::at;
-    using base::get;
-    using base::extract;
-    using base::match;
 };
 
 // Makes a pack of types
 template <class... Types>
-constexpr type_pack<Types...> make_pack() noexcept {
+constexpr type_pack<Types...> pack() noexcept {
     return type_pack<Types...>{};
 }
 // ========================================================================== //
 
 
 
+// =========================== NTTP TEMPLATE PACK =========================== //
+// An indexed element of a nttp template pack
+template <std::size_t Index, template <auto...> class Template>
+struct nttp_template_pack_element: pack_element_base<
+    Index,
+    nttp_template_wrapper<Template>,
+    nttp_template_pack_element<Index, Template>
+> {
+    using base = typename nttp_template_pack_element::pack_element_base;
+};
+
+// The base class of a nttp template pack: declaration
+template <class Indices, template <auto...> class... Templates>
+struct nttp_template_pack_base;
+
+// The base class of a nttp template pack: indexing specialization
+template <std::size_t... Indices, template <auto...> class... Templates>
+struct nttp_template_pack_base<std::index_sequence<Indices...>, Templates...>
+: pack_base<nttp_template_pack_element<Indices, Templates>...> {
+    using base = typename nttp_template_pack_base::pack_base;
+};
+
+// A pack of nttp templates
+template <template <auto...> class... Templates>
+struct nttp_template_pack: nttp_template_pack_base<
+    std::make_index_sequence<sizeof...(Templates)>,
+    Templates...
+> {
+    using base = typename nttp_template_pack::nttp_template_pack_base;
+};
+
+// Makes a pack of nttp templates
+template <template <auto...> class... Templates>
+constexpr nttp_template_pack<Templates...> pack() noexcept {
+    return nttp_template_pack<Templates...>{};
+}
+// ========================================================================== //
+
+
+
+// =========================== TYPE TEMPLATE PACK =========================== //
+// An indexed element of a type template pack
+template <std::size_t Index, template <class...> class Template>
+struct type_template_pack_element: pack_element_base<
+    Index,
+    type_template_wrapper<Template>,
+    type_template_pack_element<Index, Template>
+> {
+    using base = typename type_template_pack_element::pack_element_base;
+};
+
+// The base class of a type template pack: declaration
+template <class Indices, template <class...> class... Templates>
+struct type_template_pack_base;
+
+// The base class of a type template pack: indexing specialization
+template <std::size_t... Indices, template <class...> class... Templates>
+struct type_template_pack_base<std::index_sequence<Indices...>, Templates...>
+: pack_base<type_template_pack_element<Indices, Templates>...> {
+    using base = typename type_template_pack_base::pack_base;
+};
+
+// A pack of type templates
+template <template <class...> class... Templates>
+struct type_template_pack: type_template_pack_base<
+    std::make_index_sequence<sizeof...(Templates)>,
+    Templates...
+> {
+    using base = typename type_template_pack::type_template_pack_base;
+};
+
+// Makes a pack of type templates
+template <template <class...> class... Templates>
+constexpr type_template_pack<Templates...> pack() noexcept {
+    return type_template_pack<Templates...>{};
+}
+// ========================================================================== //
+
+
+
+// =========================== MIXED TEMPLATE PACK ========================== //
+// An indexed element of a mixed template pack
+template <std::size_t Index, template <class, auto...> class Template>
+struct mixed_template_pack_element: pack_element_base<
+    Index,
+    mixed_template_wrapper<Template>,
+    mixed_template_pack_element<Index, Template>
+> {
+    using base = typename mixed_template_pack_element::pack_element_base;
+};
+
+// The base class of a mixed template pack: declaration
+template <class Indices, template <class, auto...> class... Templates>
+struct mixed_template_pack_base;
+
+// The base class of a mixed template pack: indexing specialization
+template <std::size_t... Indices, template <class, auto...> class... Templates>
+struct mixed_template_pack_base<std::index_sequence<Indices...>, Templates...>
+: pack_base<mixed_template_pack_element<Indices, Templates>...> {
+    using base = typename mixed_template_pack_base::pack_base;
+};
+
+// A pack of mixed templates
+template <template <class, auto...> class... Templates>
+struct mixed_template_pack: mixed_template_pack_base<
+    std::make_index_sequence<sizeof...(Templates)>,
+    Templates...
+> {
+    using base = typename mixed_template_pack::mixed_template_pack_base;
+};
+
+// Makes a pack of mixed templates
+template <template <class, auto...> class... Templates>
+constexpr mixed_template_pack<Templates...> pack() noexcept {
+    return mixed_template_pack<Templates...>{};
+}
+// ========================================================================== //
+
+
+/*
 // ================================ NTTP PACK =============================== //
 // A wrapper for an element of a nttp pack: declaration
 template <auto Value, std::size_t... Index>
@@ -740,7 +910,7 @@ struct pack_extract<Pack, Index, if_pack_t<Pack>> {
 template <class Pack, std::size_t Index>
 using pack_extract_t = typename pack_extract<Pack, Index>::type;
 // ========================================================================== //
-
+*/
 
 
 // ========================================================================== //

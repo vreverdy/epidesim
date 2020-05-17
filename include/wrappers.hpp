@@ -233,10 +233,22 @@ template <class Trait, class Entity, class... Args>
 inline constexpr auto apply_trait_v
 = apply_trait<Trait, Entity, Args...>::value;
 
+// Checks that a wrapped trait can be applied: not applicable
+template <class Apply, class = void>
+struct if_apply_trait {};
+
+// Checks that a wrapped trait can be applied: applicable successfully
+template <class Trait, class Entity, class... Args>
+struct if_apply_trait<apply_trait<Trait, Entity, Args...>, std::void_t<
+    if_trait_wrapper_t<Trait>,
+    decltype(apply_trait_v<Trait, Entity, Args...>)
+>>: std::enable_if<apply_trait_v<Trait, Entity, Args...>> {};
+
 // Alias template to enable if
 template <class Trait, class Entity, class... Args>
-using if_apply_trait_t
-= std::enable_if_t<apply_trait_v<Trait, Entity, Args...>>;
+using if_apply_trait_t = typename if_apply_trait<
+    apply_trait<Trait, Entity, Args...>
+>::type;
 // ========================================================================== //
 
 
@@ -755,35 +767,27 @@ class variable_wrapper_base<CRTP<T>>: public variable_wrapper_base<>
     // Implicit access
     public:
     constexpr operator type&() & {
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
     constexpr operator const type&() const & {
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
     constexpr operator volatile type&() volatile & {
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
     constexpr operator const volatile type&() const volatile & {
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
     constexpr operator type&() && {
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
     constexpr operator const type&() const && {
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
     constexpr operator volatile type&() volatile && {
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
     constexpr operator const volatile type&() const volatile && {
-        std::cout << __PRETTY_FUNCTION__ << std::endl;
         return _variable;
     }
 
