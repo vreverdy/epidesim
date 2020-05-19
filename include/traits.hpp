@@ -551,7 +551,7 @@ using if_specialization_of_t
 
 
 // ============================ COMMON TEMPLATE ============================= //
-// Computes the common template of specializations: no common template
+// Computes the common template of specializations: declaration
 template <class... Specializations>
 struct common_template;
 
@@ -651,55 +651,136 @@ using if_common_template_t = std::enable_if_t<have_common_template_v<Types...>>;
 
 
 
+// ============================ REBIND ALLOCATOR ============================ //
+// Rebinds an allocator to a different value type: declaration
+template <class Alloc, class To, class = void>
+struct rebind_allocator;
+
+// Rebinds an allocator to a different value type: allocator specialization
+template <class Alloc, class To>
+struct rebind_allocator<Alloc, To, if_allocator_t<Alloc>> {
+    using type = typename std::allocator_traits<
+        Alloc
+    >::template rebind_alloc<To>;
+};
+
+// Alias template
+template <class Alloc, class To>
+using rebind_allocator_t = typename rebind_allocator<Alloc, To>::type;
+// ========================================================================== //
+
+
+
 // ============================ REBIND CONTAINER ============================ //
-/*
-template <class, class, class = void, class = void, class = void>
+// Helps rebind a container template argument
+template <
+    class Arg,
+    class Head,
+    class Tail,
+    std::size_t Index,
+    std::size_t Size
+>
+struct container_argument_rebinder {
+    template <class True, class False>
+    using if_head_t = std::conditional_t<Index == 0, True, False>;
+    template <class True, class False>
+    using if_tail_t = std::conditional_t<Index + 1 == Size, True, False>;
+    using type = if_head_t<Head, if_tail_t<Tail, Arg>>;
+};
+
+// Helps rebind container template arguments: declaration 
+template <class...>
+struct container_rebinder;
+
+// Helps rebind container template arguments: specialization for container 
+template <
+    template <class...> class Container,
+    class... Args,
+    class To
+>
+struct container_rebinder<Container<Args...>, To>: container_rebinder<
+    std::index_sequence_for<Args...>,
+    Container<Args...>,
+    To,
+    rebind_allocator_t<typename Container<Args...>::allocator_type, To>
+> {};
+
+// Helps rebind container template arguments: indexing specialization
+template <
+    std::size_t... Indices,
+    template <class...> class Container,
+    class... Args,
+    class Head,
+    class Tail
+>
+struct container_rebinder<
+    std::index_sequence<Indices...>,
+    Container<Args...>,
+    Head,
+    Tail
+> {
+    static constexpr std::size_t size = sizeof...(Args);
+    template <class Arg, std::size_t Index>
+    using rebinder = container_argument_rebinder<Arg, Head, Tail, Index, size>;
+    using rebinded = Container<typename rebinder<Args, Indices>::type...>;
+    using type = std::enable_if_t<
+        std::is_same_v<typename rebinded::value_type, Head> &&
+        std::is_same_v<typename rebinded::allocator_type, Tail>,
+        rebinded
+    >;
+};
+
+// Helper alias template
+template <class Container, class To>
+using container_rebinder_t
+= typename container_rebinder<Container, To>::type;
+
+// Rebinds a container to a different value type: declaration
+template <class Container, class To, class = void, class = void, class = void>
 struct rebind_container;
 
-template <template <class, auto...> class C, class To, class From, auto... X>
-struct rebind_container<C<From, X...>, To, if_static_container_t<
-        C<From, X...>
-    >, if_static_container_t<C<To, X...>>, std::enable_if_t<
-        std::is_same_v<typename C<From, X...>::value_type, From> &&
-        std::is_same_v<typename C<To, X...>::value_type, To>
+// Rebinds a container to a different value type: generic static container
+template <
+    template <class, auto...> class Container,
+    class From,
+    auto... Args,
+    class To
+>
+struct rebind_container<
+    Container<From, Args...>,
+    To,
+    if_static_container_t<Container<From, Args...>>,
+    if_static_container_t<Container<To, Args...>>,
+    std::enable_if_t<
+        std::is_same_v<typename Container<From, Args...>::value_type, From> &&
+        std::is_same_v<typename Container<To, Args...>::value_type, To>
     >
 > {
-    using type = C<To, X...>;
+    using type = Container<To, Args...>;
 };
 
-template <template <class, class...> class C, class To, class From, class... X>
-struct rebind_container<C<From, X...>, To, if_static_container_t<
-        C<From, X...>
-    >, if_static_container_t<C<To, X...>>, std::enable_if_t<
-        std::is_same_v<typename C<From, X...>::value_type, From> &&
-        std::is_same_v<typename C<To, X...>::value_type, To>
+// Rebinds a container to a different value type: generic dynamic container
+template <
+    template <class...> class Container,
+    class From,
+    class... Args,
+    class To
+>
+struct rebind_container<
+    Container<From, Args...>,
+    To,
+    if_dynamic_container_t<Container<From, Args...>>,
+    if_dynamic_container_t<container_rebinder_t<Container<From, Args...>, To>>,
+    std::enable_if_t<
+        std::is_same_v<typename Container<From, Args...>::value_type, From>
     >
 > {
-    using type = C<To, X...>;
+    using type = container_rebinder_t<Container<From, Args...>, To>;
 };
 
-template <template <class, auto...> class C, class To, class From, auto... X>
-struct rebind_container<C<From, X...>, To, if_dynamic_container_t<
-        C<From, X...>
-    >, if_static_container_t<C<To, X...>>, std::enable_if_t<
-        std::is_same_v<typename C<From, X...>::value_type, From> &&
-        std::is_same_v<typename C<To, X...>::value_type, To>
-    >
-> {
-    using type = C<To, X...>;
-};
-
-template <template <class, class...> class C, class To, class From, class... X>
-struct rebind_container<C<From, X...>, To, if_dynamic_container_t<
-        C<From, X...>
-    >, if_static_container_t<C<To, X...>>, std::enable_if_t<
-        std::is_same_v<typename C<From, X...>::value_type, From> &&
-        std::is_same_v<typename C<To, X...>::value_type, To>
-    >
-> {
-    using type = C<To, X...>;
-};
-*/
+// Alias template
+template <class Container, class To>
+using rebind_container_t = typename rebind_container<Container, To>::type;
 // ========================================================================== //
 
 
